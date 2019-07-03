@@ -8,7 +8,7 @@ import threading
 
 import tornado.web
 
-from lib.redisopt import conn
+from lib.redisopt import conn,content_deal
 from lib import out
 from lib import scan
 from lib import secure
@@ -336,3 +336,25 @@ class ResetScanHandler(BaseHandler):
         while stat:
             stat = conn.rpoplpush("running", "waiting")
         return self.write(out.alert("reset success!", "/scan_stat?stat=true"))
+
+class ApiHandler(BaseHandler):
+    def post(self):
+        try:
+            headers = self.get_body_argument("headers")
+            host = self.get_body_argument("host")
+            method = self.get_body_argument("method")
+            postdata = self.get_body_argument("postdata")
+            uri = self.get_body_argument("uri")
+            packet = self.get_body_argument("packet")
+        except tornado.web.MissingArgumentError:
+            self.write("Params Error")
+            self.fulsh()
+        if postdata != "":
+            postdata = base64.b64decode(postdata)
+        packet  =  base64.b64decode(packet)
+        headers = json.loads(headers)
+        content_deal(headers,host,method,postdata,uri,packet)
+        return self.write("Success")
+
+    def get(self):
+        return self.write("You need post params</br>headers,host,method,postdata(base64),uri,packet(base64)")

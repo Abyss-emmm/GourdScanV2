@@ -1,4 +1,4 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
 # coding: utf-8
 
 VERSION = "2.1"
@@ -39,7 +39,7 @@ def main():
     settings['static_path'] = path(ROOT, "web", "static")
     settings['template_loader'] = tornado.template.Loader(path(ROOT, "web", "templates"))
     settings['login_url'] = "/login"
-    settings['debug'] = False 
+    settings['debug'] = False
     site.addsitedir(path(ROOT, 'handlers'))
     conf = config.load()
     conf['scapy_stat'] = 'false'
@@ -55,7 +55,7 @@ def main():
 
 if __name__ == '__main__':
     # check update
-    check_update()
+#    check_update()
 
     print logo
     main()

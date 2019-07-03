@@ -37,7 +37,8 @@ def time_requests(method, url, headers, postdata=""):
             res = requests.get(url=url, headers=headers)
         time1 = time.time()
         return res.content, time1-time0
-    except:
+    except Exception as e:
+        print(e)
         return "Error", 0
 
 
