@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python 
+﻿#!/usr/bin/env python
 # coding: utf-8
 
 import requests
@@ -14,9 +14,11 @@ Checking update when it start
 def check_update():
     out.good("Checking update...")
     try:
-        res = requests.get(config.load()['check_url'], timeout=10)
+#        res = requests.get(config.load()['check_url'], timeout=10)
+        res = requests.get(config.config_file.conf['check_url'], timeout=10)
         version = res.content
-        if version != config.load()['version']:
+#        if version != config.load()['version']:
+        if version != config.config_file.conf['version']:
             update()
             return True
         else:

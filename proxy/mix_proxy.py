@@ -105,7 +105,7 @@ def get_res(data, connstream, https):
 
             if 'Host' in headers.keys():
                 del headers['Host']
-                
+
             res = requests.post(uri, headers=headers, data=body, verify=False)
             response = get_str(res)
             connstream.sendall(response)
@@ -144,19 +144,24 @@ def client_conn(connstream, https=False):
 
 def main():
     try:
-        addr = config.load()['mix_addr']
-        port = int(config.load()['mix_port'])
+#        addr = config.load()['mix_addr']
+#        port = int(config.load()['mix_port'])
+        addr = config.config_file.conf['mix_addr']
+        port = int(config.config_file.conf['mix_port'])
         bindsocket = socket.socket()
         bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         bindsocket.bind((addr, port))
         bindsocket.listen(300)
     except Exception as e:
-        conf = config.load()
+#        conf = config.load()
+        conf = config.config_file.conf
         conf['mix_stat'] = "false"
-        config.update(conf)
+#        config.update(conf)
+        config.config_file.update()
         print e
         exit()
-    while config.load()['mix_stat'].lower() == "true":
+#    while config.load()['mix_stat'].lower() == "true":
+    while config.config_file.conf['mix_stat'].lower() == "true":
         try:
             connstream, fromaddr = bindsocket.accept()
             t = threading.Thread(target=client_conn, args=(connstream,))

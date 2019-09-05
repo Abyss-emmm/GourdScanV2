@@ -76,7 +76,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     def deal(method):
         def wrapper(self, *args, **kwargs):
-            if config.load()['tornado_stat'].lower() == "false":
+#            if config.load()['tornado_stat'].lower() == "false":
+            if config.config_file.conf['tornado_stat'].lower() == "false":
                 return
             return method(self, *args, **kwargs)
         return wrapper
@@ -90,7 +91,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             requests += "%s: %s\r\n" % (key, value)
         requests += "\r\n%s" % body
         return requests
-    
+
     @deal
     @tornado.web.asynchronous
     def get(self):
@@ -223,7 +224,9 @@ def run_proxy(port, address):
 
 
 def main():
-    port = int(config.load()['tornado_port'])
-    address = config.load()['tornado_address']
+#    port = int(config.load()['tornado_port'])
+#    address = config.load()['tornado_address']
+    port = int(config.config_file.conf['tornado_port'])
+    address = config.config_file.conf['tornado_address']
     print ("Starting HTTP proxy on port %d" % port)
     run_proxy(port, address)

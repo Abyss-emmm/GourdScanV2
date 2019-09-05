@@ -1,4 +1,4 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
 # coding: utf-8
 
 import os
@@ -17,7 +17,8 @@ Destroy a session string to make it logout.
 
 
 def new(ip):
-    return md5.new(config.load()["cookie_secret"] + str(time.time()) + ip).hexdigest()
+    #return md5.new(config.load()["cookie_secret"] + str(time.time()) + ip).hexdigest()
+    return md5.new(config.config_file.conf["cookie_secret"] + str(time.time()) + ip).hexdigest()
 
 
 def check(session):
@@ -51,7 +52,8 @@ def destroy(session):
 
 
 def size_control():
-    if os.path.getsize(SESSION_CONF_FILE) > config.load()["session_size"]:
+#    if os.path.getsize(SESSION_CONF_FILE) > config.load()["session_size"]:
+    if os.path.getsize(SESSION_CONF_FILE) > config.config_file.conf["session_size"]:
         with open(SESSION_CONF_FILE, 'r') as f:
             lines = f.readlines()
             f.close()
@@ -59,7 +61,8 @@ def size_control():
             size = 0
             for line in lines:
                 size += len(line)
-                if size < config.load()["session_size"]:
+#                if size < config.load()["session_size"]:
+                if size < config.config_file.conf["session_size"]:
                     ff.write(line)
                 else:
                     ff.close()

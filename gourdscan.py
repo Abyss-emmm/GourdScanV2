@@ -41,13 +41,15 @@ def main():
     settings['login_url'] = "/login"
     settings['debug'] = False
     site.addsitedir(path(ROOT, 'handlers'))
-    conf = config.load()
+    config.config_file.load()
+#    conf = config.load()
+    conf = config.config_file.conf
     conf['scapy_stat'] = 'false'
     conf['tornado_stat'] = 'false'
     conf['scan_stat'] = 'false'
     conf['mix_stat'] = 'false'
     conf['tornado_run_stat'] = 'false'
-    config.update(conf)
+#    config.update(conf)
     app = make_app(settings)
     app.listen(port=options.port, address=options.address)
     out.good("Web app start at: http://%s:%s" % (options.address, options.port))

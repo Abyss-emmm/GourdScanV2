@@ -4,6 +4,7 @@ import json
 import redis
 import base64
 import urlparse
+import pickle
 
 from hashlib import md5
 
@@ -43,9 +44,12 @@ def get_hash(host, uri, postdata):
 def content_deal(headers, host, method, postdata, uri, packet):
     u = urlparse.urlparse(uri)
     url = uri.split(u.netloc)[-1]
-    white_domain = config.load()['white_domain']
-    black_domain = config.load()['black_domain']
-    black_ext = config.load()['black_ext']
+#    white_domain = config.load()['white_domain']
+#    black_domain = config.load()['black_domain']
+#    black_ext = config.load()['black_ext']
+    white_domain = config.config_file.conf['white_domain']
+    black_domain = config.config_file.conf['black_domain']
+    black_ext = config.config_file.conf['black_ext']
     for ext in black_ext.split(','):
         if u.path.lower().endswith("."+ext):
             return

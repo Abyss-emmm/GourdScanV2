@@ -58,8 +58,10 @@ def print_request(method, host, url):
 
 
 def capture(x):
-    out = config.load()['scapy_out'].lower()
-    if config.load()['scapy_stat'].lower() == 'false':
+#    out = config.load()['scapy_out'].lower()
+    out = config.config_file.conf['scapy_out'].lower()
+#    if config.load()['scapy_stat'].lower() == 'false':
+    if config.config_file.conf['scapy_stat'].lower() == 'false':
         raise Exception('scapy', 'out')
     if 'HTTP/' in x.lastlayer().original and x.lastlayer().original[0:4] != 'HTTP':
         body = x.lastlayer().original
@@ -67,7 +69,8 @@ def capture(x):
 
 
 def main():
-    NIC = config.load()["scapy_network_card"]  # network adapter name
+#    NIC = config.load()["scapy_network_card"]  # network adapter name
+    NIC = config.config_file.conf["scapy_network_card"]  # network adapter name
     try:
         if NIC == 'all':
             sniff(filter="tcp", prn=lambda x: capture(x))
@@ -75,6 +78,8 @@ def main():
             sniff(iface=NIC, filter="tcp", prn=lambda x: capture(x))
     except Exception as e:
         error("scapy out!")
-        conf = config.load()
+#        conf = config.load()
+        conf = config.config_file.conf
         conf['scapy_stat'] = "false"
-        config.update(conf)
+#        config.update(conf)
+        config.config_file.update()

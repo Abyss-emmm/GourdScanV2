@@ -5,6 +5,7 @@ import json
 import base64
 import urllib
 import threading
+import urlparse
 
 import tornado.web
 
@@ -41,9 +42,9 @@ class LoginHandler(tornado.web.RequestHandler):
     def post(self):
         account = secure.clear(self.get_argument("account"))
         password = secure.clear(self.get_argument("password"))
-        if account == config.load()['account'] and password == config.load()['password']:
+        if account == config.config_file.conf['account'] and password == config.config_file.conf['password']:
             cookie = session.new(self.request.remote_ip)
-            self.set_cookie("ysrc_token", cookie, expires_days=int(config.load()["session_expires_time"]))
+            self.set_cookie("ysrc_token", cookie, expires_days=int(config.config_file.conf["session_expires_time"]))
             session.update(cookie)
             self.set_header("Location", "/")
             self.set_status(302)
@@ -73,7 +74,7 @@ class IndexHandler(BaseHandler):
                 stat = decode_results['stat']
                 stat = stats[stat]
                 stats_all[reqhash] = stat
-        self.render("index.html", waiting_num=conn.llen("waiting"), running_num=conn.llen("running"), finished_num=conn.llen("finished"), vulnerable_num=conn.llen("vulnerable"), waiting=waiting, running=running, finished=finished, vulnerable=vulnerable, time=config.load()["flush_time"], stats_all=stats_all)
+        self.render("index.html", waiting_num=conn.llen("waiting"), running_num=conn.llen("running"), finished_num=conn.llen("finished"), vulnerable_num=conn.llen("vulnerable"), waiting=waiting, running=running, finished=finished, vulnerable=vulnerable, time=config.config_file.conf["flush_time"], stats_all=stats_all)
         return
 
 
@@ -81,18 +82,19 @@ class ConfHandler(BaseHandler):
 
     @authenticated
     def get(self):
-        return self.render("config.html", config = config.load())
+        return self.render("config.html", config = config.config_file.conf)
 
     @authenticated
     def post(self):
-        conf_all = config.load()
+        conf_all = config.config_file.conf
         for i in self.request.body.split("&"):
             para = secure.clear(urllib.unquote(i.split("=", 1)[0]))
             value = secure.clear(urllib.unquote(i.split("=", 1)[1]))
             if para in conf_all.keys():
                 conf_all[para] = value
-        config.update(conf_all)
-        return self.render("config.html", config=config.load())
+#        config.update(conf_all)
+        config.config_file.update()
+        return self.render("config.html", config=config.config_file.conf)
 
 
 class ScanConfigHandler(BaseHandler):
@@ -110,7 +112,7 @@ class ScanConfigHandler(BaseHandler):
         rules = {}
         for i in rule:
             rules[i] = config.rule_read(i)
-        return self.render("scan_config.html", config=config.load(), start=start, rules=rules, scan_stat=config.load()['scan_stat'], sqlmap_api=config.load_rule()['sqlmap_api'])
+        return self.render("scan_config.html", config=config.config_file.conf, start=start, rules=rules, scan_stat=config.config_file.conf['scan_stat'], sqlmap_api=config.load_rule()['sqlmap_api'])
 
     @authenticated
     def post(self):
@@ -136,9 +138,9 @@ class ScanStatHandler(BaseHandler):
     @authenticated
     def get(self):
         stat = secure.clear(self.get_argument("stat"))
-        config_all = config.load()
+        config_all = config.config_file.conf
         config_all['scan_stat'] = stat
-        config.update(config_all)
+#        config.update(config_all)
         if stat.lower() == "true":
             thread = threading.Thread(target=scan.scan_start, args=())
             thread.setDaemon(True)
@@ -195,7 +197,7 @@ class ListHandler(BaseHandler):
             start = int(self.get_argument("start"))
         except:
             start = 0
-        page_num = int(config.load()['page_num'])
+        page_num = int(config.config_file.conf['page_num'])
         length = conn.llen(list_type)
         last = start + page_num - 1
         page_now = start / page_num + 1
@@ -237,32 +239,32 @@ class ProxyHandler(BaseHandler):
         proxy_type = self.get_argument("type")
         conf = {}
         if proxy_type == "mix_proxy":
-            conf['mix_addr'] = config.load()['mix_addr']
-            conf['mix_port'] = config.load()['mix_port']
-            stat = config.load()['mix_stat']
+            conf['mix_addr'] = config.config_file.conf['mix_addr']
+            conf['mix_port'] = config.config_file.conf['mix_port']
+            stat = config.config_file.conf['mix_stat']
             try:
                 start_stat = self.get_argument("stat")
-                start_conf = config.load()
+                start_conf = config.config_file.conf
                 start_conf['mix_stat'] = start_stat
-                config.update(start_conf)
+#                config.update(start_conf)
                 if start_stat.lower() == "true":
                     thread = threading.Thread(target=mix_proxy.main)
                     thread.setDaemon(True)
                     thread.start()
                 else:
-                    secure.kill(config.load()['mix_addr'], int(config.load()['mix_port']), "GE")
+                    secure.kill(config.config_file.conf['mix_addr'], int(config.config_file.conf['mix_port']), "GE")
                 return self.write(out.jump("/proxy?type=" + proxy_type))
             except:
                 pass
         elif proxy_type == "scapy":
-            conf['scapy_out'] = config.load()['scapy_out']
-            conf['scapy_network_card'] = config.load()['scapy_network_card']
-            stat = config.load()['scapy_stat']
+            conf['scapy_out'] = config.config_file.conf['scapy_out']
+            conf['scapy_network_card'] = config.config_file.conf['scapy_network_card']
+            stat = config.config_file.conf['scapy_stat']
             try:
                 start_stat = secure.clear(self.get_argument("stat"))
-                start_conf = config.load()
+                start_conf = config.config_file.conf
                 start_conf['scapy_stat'] = start_stat
-                config.update(start_conf)
+#                config.update(start_conf)
                 if start_stat.lower() == "true":
                     thread = threading.Thread(target=pyscapy.main)
                     thread.setDaemon(True)
@@ -271,21 +273,21 @@ class ProxyHandler(BaseHandler):
             except:
                 pass
         elif proxy_type == "tornado":
-            conf['tornado_address'] = config.load()['tornado_address']
-            conf['tornado_port'] = config.load()['tornado_port']
-            stat = config.load()['tornado_stat']
+            conf['tornado_address'] = config.config_file.conf['tornado_address']
+            conf['tornado_port'] = config.config_file.conf['tornado_port']
+            stat = config.config_file.conf['tornado_stat']
             try:
                 start_stat = secure.clear(self.get_argument("stat"))
-                start_conf = config.load()
+                start_conf = config.config_file.conf
                 start_conf['tornado_stat'] = start_stat
-                config.update(start_conf)
-                if start_stat.lower() == "true" and config.load()['tornado_run_stat'] == 'false':
+#                config.update(start_conf)
+                if start_stat.lower() == "true" and config.config_file.conf['tornado_run_stat'] == 'false':
                     thread = threading.Thread(target=proxy_io.main)
                     thread.setDaemon(True)
                     thread.start()
-                    start_conf = config.load()
+                    start_conf = config.config_file.conf
                     start_conf['tornado_run_stat'] = 'true'
-                    config.update(start_conf)
+#                    config.update(start_conf)
                 return self.write(out.jump("/proxy?type=" + proxy_type))
             except:
                 pass
@@ -297,20 +299,23 @@ class ProxyHandler(BaseHandler):
     def post(self):
         proxy_type = self.get_argument("type")
         if proxy_type == "mix_proxy":
-            conf = config.load()
+            conf = config.config_file.conf
             conf["mix_addr"] = secure.clear(self.get_argument("mix_addr"))
             conf["mix_port"] = secure.clear(self.get_argument("mix_port"))
-            config.update(conf)
+#            config.update(conf)
+            config.config_file.update()
         elif proxy_type == "scapy":
-            conf = config.load()
+            conf = config.config_file.conf
             conf['scapy_out'] = secure.clear(self.get_argument('scapy_out'))
             conf['scapy_network_card'] = self.get_argument('scapy_network_card')
-            config.update(conf)
+#            config.update(conf)
+            config.config_file.update()
         elif proxy_type == "tornado":
-            conf = config.load()
+            conf = config.config_file.conf
             conf['tornado_address'] = secure.clear(self.get_argument('tornado_address'))
             conf['tornado_port'] = secure.clear(self.get_argument('tornado_port'))
-            config.update(conf)
+#            config.update(conf)
+            config.config_file.update()
         return self.write(out.jump("/proxy?type=" + proxy_type))
 
 
@@ -330,7 +335,7 @@ class ResetScanHandler(BaseHandler):
 
     @authenticated
     def get(self):
-        if config.load()['scan_stat'].lower() == 'false':
+        if config.config_file.conf['scan_stat'].lower() == 'false':
             return self.write(out.jump("/"))
         stat = conn.rpoplpush("running", "waiting")
         while stat:
@@ -345,13 +350,13 @@ class ApiHandler(BaseHandler):
             method = self.get_body_argument("method")
             postdata = self.get_body_argument("postdata")
             uri = self.get_body_argument("uri")
+            print uri
             packet = self.get_body_argument("packet")
         except tornado.web.MissingArgumentError:
             self.write("Params Error")
             self.fulsh()
-        if postdata != "":
-            postdata = base64.b64decode(postdata)
         packet  =  base64.b64decode(packet)
+        postdata = base64.b64decode(postdata)
         headers = json.loads(headers)
         content_deal(headers,host,method,postdata,uri,packet)
         return self.write("Success")

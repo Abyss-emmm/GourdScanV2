@@ -7,6 +7,7 @@ import base64
 import requests
 import urlparse
 import threading
+import pickle
 
 from xml.dom import minidom
 from base64 import decodestring as ds
@@ -14,6 +15,11 @@ from base64 import decodestring as ds
 from lib import out
 from lib import config
 from lib.redisopt import conn
+from settings import PAYLOAD_MODE_APPEND,PAYLOAD_MODE_REPLACE,PARAM_TYPE_XML,PARAM_TYPE_JSON,PARAM_TYPE_TEXT,PARAM_DATA_JSON
+from lib.ordereddict import OrderedDict
+from params import walk,replacepayload4text,islikexml,islikejson
+from lib.params import paramtoDict
+from lib.settings import PARAM_DATA_JSON
 
 '''
 All those scan funcs and threads controll
@@ -22,7 +28,7 @@ All those scan funcs and threads controll
 
 def thread_filled():
     running_length = conn.llen("running")
-    if running_length < int(config.load()['threads_num']):
+    if running_length < int(config.config_file.conf['threads_num']):
         return False
     else:
         return True
@@ -58,6 +64,63 @@ def request_payload(request, payload, param, postdata=False, time_check=False):
     else:
         return res
 
+def request_payload_allparams(request,payload,mode = PAYLOAD_MODE_APPEND):
+    params = pickle.loads(request['params'])
+    for paramfrom in params.keys():
+        # replace query data,use uri directly,and can pass to time_requests's url param
+        querydata = request['url']
+        method = request['method']
+        if method == "POST":
+            postdata = request['postdata']
+        for param in params[paramfrom].keys():
+            paramdata = params[paramfrom][param]
+            type = paramdata['type']
+            if type == PARAM_TYPE_JSON:
+                data = paramdata[type]
+                if method == 'GET':
+                    for payloaddata in walk(querydata,payload,mode,param,data):
+                        res,times = time_requests(request['method'], payloaddata, request['headers'])
+                        yield param,res,times
+                if method == 'POST':
+                    if paramfrom == "query":
+                        for payloaddata in walk(querydata,payload,mode,param,data):
+                            res,times = time_requests(request['method'], payloaddata, request['headers'],request['postdata'])
+                            yield param,res,times
+                    if paramfrom == "postdata":
+                        for payloaddata in walk(postdata,payload,mode,param,data):
+                            res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
+                            yield param,res,times
+            if type == PARAM_TYPE_TEXT:
+                data = paramdata['value']
+                if method == 'GET':
+                    payloaddata = replacepayload4text(querydata,param,data,payload,mode)
+                    res,times = time_requests(request['method'], payloaddata, request['headers'])
+                    yield param,res,times
+                if method == 'POST':
+                    if paramfrom == "query":
+                        payloaddata = replacepayload4text(querydata,param,data,payload,mode)
+                        res,times = time_requests(request['method'], payloaddata, request['headers'],request['postdata'])
+                        yield param,payloaddata,res,times
+                    if paramfrom == "postdata":
+                        payloaddata = replacepayload4text(postdata,param,data,payload,mode)
+                        res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
+                        yield param,res,times
+            if type == PARAM_DATA_JSON:
+                data = paramdata[type]
+                postdata_tmp = "%s=%s" % (param,data)
+                idx = len(PARAM_DATA_JSON)+1
+                if method == 'POST':
+                    if paramfrom == "postdata":
+                        for payloaddata in walk(postdata_tmp,payload,mode,param,data):
+                            payloaddata = payloaddata[idx:]
+                            res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
+                            tmp = ""
+                            for i in range(0,len(payloaddata)+1):
+                                tmp += payloaddata[i*80:(i+1)*80]+"\n"
+                            #fake the param name ,so return all payloaddata
+                            yield tmp,res,times
+
+
 
 def query_collect(query, url):
     url = urlparse.urlparse(url)
@@ -72,7 +135,7 @@ def requests_convert(request):
 
 
 def scan_start():
-    while config.load()['scan_stat'].lower() == "true":
+    while config.config_file.conf['scan_stat'].lower() == "true":
         try:
             while thread_filled():
                 time.sleep(5)
@@ -97,13 +160,15 @@ def scan_start():
 
 def new_scan(reqhash, request, rules):
     out.good("start new mission: %s" % reqhash)
+    if not check_before_scan(reqhash,request):
+        return
     request_stat = 0
     request_message = []
     request_result = {}
     vulnerable = 0
     for rule in rules:
-        if config.load()['scan_stat'].lower() == "true":
-            message = eval(rule + "_scan")(request, int(config.load()['scan_level']))
+        if config.config_file.conf['scan_stat'].lower() == "true":
+            message = eval(rule + "_scan")(request, int(config.config_file.conf['scan_level']))
             request_stat = message['request_stat']
             if request_stat > vulnerable:
                 vulnerable = request_stat
@@ -115,6 +180,88 @@ def new_scan(reqhash, request, rules):
     conn.hset("results", reqhash, base64.b64encode(json.dumps(request_result)))
     conn.lrem("running", 1, reqhash)
     conn.lpush("finished", reqhash)
+
+def check_before_scan(reqhash,request):
+    def finshreq(request_result,vulnerable):
+        if vulnerable > 0:
+            conn.lpush("vulnerable", reqhash)
+        conn.hset("results", reqhash, base64.b64encode(json.dumps(request_result)))
+        conn.lrem("running", 1, reqhash)
+        conn.lpush("finished", reqhash)
+    request_result = {}
+    vulnerable = 0
+    headers = request['headers']
+    method = request['method']
+    url = request["url"]
+    query = urlparse.urlparse(url).query
+    postdata = request['postdata']
+    params = {}
+    if 'Content-Type' in headers.keys():
+        if 'multipart/form-data' in headers['Content-Type']:
+            message = ["Content-Type:multipart/form-data"]
+            vulnerable = 1
+            request_result['b4check'] = {"stat":vulnerable,"message":message}
+            request_result['stat'] = vulnerable
+            finshreq(request_result,vulnerable)
+            return False
+    if query != "":
+        try:
+            getparams = paramtoDict(query)
+            params['query'] = getparams
+        except:
+            message = ["Error:Can't anaylyze data|#|Data:"+getparam]
+            vulnerable = 1
+            request_result['b4check'] = {"stat":vulnerable,"message":message}
+            request_result['stat'] = vulnerable
+            finshreq(request_result,vulnerable)
+            return False
+    if method == "POST":
+        if islikejson(postdata):
+            try:
+                testableParameters = OrderedDict()
+                jsondata = json.loads(postdata)
+                testableParameters[PARAM_DATA_JSON] = {'type':PARAM_DATA_JSON,'value':postdata,PARAM_DATA_JSON:jsondata}
+                params['postdata'] = testableParameters
+            except:
+                message = ["Error:Can't anaylyze data|#|Data:"+postdata]
+                vulnerable = 1
+                request_result['b4check'] = {"stat":vulnerable,"message":message}
+                request_result['stat'] = vulnerable
+                finshreq(request_result,vulnerable)
+                return False
+        elif islikexml(postdata):
+            try:
+                xmldata = minidom.parseString(postdata)
+                message = ["Info:Find XML Data|#|Data:"+postdata]
+                vulnerable = 1
+                request_result['b4check'] = {"stat":vulnerable,"message":message}
+                request_result['stat'] = vulnerable
+                finshreq(request_result,vulnerable)
+                return False
+            except:
+                message = ["Error:Can't anaylyze data|#|Data:"+postdata]
+                vulnerable = 1
+                request_result['b4check'] = {"stat":vulnerable,"message":message}
+                request_result['stat'] = vulnerable
+                finshreq(request_result,vulnerable)
+                return False
+        else:
+            if postdata != "":
+                try:
+                    postparams = paramtoDict(postdata)
+                    params['postdata'] = postparams
+                except:
+                    message = ["Error:Can't anaylyze data|#|Data:"+postdata]
+                    vulnerable = 1
+                    request_result['b4check'] = {"stat":vulnerable,"message":message}
+                    request_result['stat'] = vulnerable
+                    finshreq(request_result,vulnerable)
+                    return False
+    params = pickle.dumps(params)
+    request['params'] = params
+    return True
+
+
 
 
 def common_scan(request, config_level, re_test, scan_type):
@@ -132,14 +279,14 @@ def common_scan(request, config_level, re_test, scan_type):
                             if re.search(response_rule.strip().encode("utf-8"), response):
                                 message['request_stat'] = 3
                                 message['message'] += "payload: %s|#|param: %s|#|findstr: %s|,|" % (payload.strip().encode('utf-8'), param_name.split("=")[0], response_rule.strip().encode('utf-8'))
-                                if config.load()['only_one_match'].lower() == "true":
+                                if config.config_file.conf['only_one_match'].lower() == "true":
                                     return message
                         else:
                             if response_rule.strip().encode("utf-8") in response:
                             #rule format: unicode, it need to be encoded with utf-8
                                 message['request_stat'] = 3
                                 message['message'] += "payload: %s|#|param: %s|#|findstr: %s|,|" % (payload.strip().encode('utf-8'), param_name.split("=")[0], response_rule.strip().encode('utf-8'))
-                                if config.load()['only_one_match'].lower() == "true":
+                                if config.config_file.conf['only_one_match'].lower() == "true":
                                     return message
                 for param_name in request['postdata'].split("&"):
                     if request['postdata'] == "":
@@ -151,14 +298,14 @@ def common_scan(request, config_level, re_test, scan_type):
                             if re.search(response_rule.strip().encode("utf-8"), response):
                                 message['request_stat'] = 3
                                 message['message'] += "payload: %s|#|param: %s|#|findstr: %s|,|" % (payload.strip().encode('utf-8'), param_name.split("=")[0], response_rule.strip().encode('utf-8'))
-                                if config.load()['only_one_match'].lower() == "true":
+                                if config.config_file.conf['only_one_match'].lower() == "true":
                                     return message
                         else:
                             if response_rule.strip().encode("utf-8") in response:
                             #rule format: unicode, it need to be encoded with utf-8
                                 message['request_stat'] = 3
                                 message['message'] += "payload: %s|#|param: %s|#|findstr: %s|,|" % (payload.strip().encode('utf-8'), param_name.split("=")[0], response_rule.strip().encode('utf-8'))
-                                if config.load()['only_one_match'].lower() == "true":
+                                if config.config_file.conf['only_one_match'].lower() == "true":
                                     return message
     return message
 
@@ -183,7 +330,7 @@ def xpath_scan(request, level):
     return message
 
 
-def xss_scan(request, config_level):
+def xss_scan_old(request, config_level):
     message = {"request_stat": 0, "message": ""}
     dom = minidom.parse(config.rule_read("xss", get_file_handle=True)).documentElement
     for node in dom.getElementsByTagName('couple'):
@@ -196,7 +343,7 @@ def xss_scan(request, config_level):
                     if payload.strip().encode("utf-8") in response:
                         message['request_stat'] = 1
                         message['message'] += "payload: %s|#|param: %s|#|findstr: %s|,|" % (payload.strip().encode('utf-8'), param_name.split("=")[0], payload.strip().encode('utf-8'))
-                        if config.load()['only_one_match'].lower() == "true":
+                        if config.config_file.conf['only_one_match'].lower() == "true":
                             return message
                 for param_name in request['postdata'].split("&"):
                     if request['postdata'] == "":
@@ -206,9 +353,26 @@ def xss_scan(request, config_level):
                     if payload.strip().encode("utf-8") in response:
                         message['request_stat'] = 1
                         message['message'] += "payload: %s|#|param: %s|#|findstr: %s|,|" % (payload.strip().encode('utf-8'), param_name.split("=")[0], payload.strip().encode('utf-8'))
-                        if config.load()['only_one_match'].lower() == "true":
+                        if config.config_file.conf['only_one_match'].lower() == "true":
                             return message
     return message
+
+def xss_scan(request, config_level):
+    message = {"request_stat": 0, "message": ""}
+    dom = minidom.parse(config.rule_read("xss", get_file_handle=True)).documentElement
+    for node in dom.getElementsByTagName('couple'):
+        couple_id = int(node.getAttribute("id"))
+        if couple_id <= config_level:
+            payloads = node.getElementsByTagName('requests')[0].childNodes[0].nodeValue.strip()
+            for payload in payloads.splitlines():
+                for param,res,times in request_payload_allparams(request,payload):
+                    if payload.strip().encode("utf-8") in res:
+                        message['request_stat'] = 1
+                        message['message'] += "payload: %s|#|param: %s|#|findstr: %s|,|" % (payload.strip().encode('utf-8'), param, payload.strip().encode('utf-8'))
+                        if config.config_file.conf['only_one_match'].lower() == "true":
+                            return message
+    return message
+
 
 
 def sqlibool_scan(request, config_level):
@@ -231,7 +395,7 @@ def sqlibool_scan(request, config_level):
                     if response1 == response11 and response2 == response22 and response1 != response2:
                         message['request_stat'] = 2
                         message['message'] += "payload1: %s|#|payload2: %s|#|param: %s|,|" % (compare1.encode('utf-8'), compare2.encode('utf-8'), param_name.split("=")[0])
-                        if config.load()['only_one_match'].lower() == "true":
+                        if config.config_file.conf['only_one_match'].lower() == "true":
                             return message
                 for param_name in request['postdata'].split("&"):
                     if request['postdata'] == "":
@@ -243,7 +407,7 @@ def sqlibool_scan(request, config_level):
                     if response1 == response11 and response2 == response22 and response1 != response2:
                         message['request_stat'] = 2
                         message['message'] += "payload1: %s|#|payload2: %s|#|param: %s|,|" % (compare1.encode('utf-8'), compare2.encode('utf-8'), param_name.split("=")[0])
-                        if config.load()['only_one_match'].lower() == "true":
+                        if config.config_file.conf['only_one_match'].lower() == "true":
                             return message
     return message
 
@@ -266,7 +430,7 @@ def sqlitime_scan(request, config_level):
                             if num <= 2.3 and num >= 1.7:
                                 message['request_stat'] = 3
                                 message['message'] += "payload: %s|#|param: %s|,|" % (payload.strip().replace("TIME_VAR", '5').encode('utf-8'), param_name.split("=")[0])
-                                if config.load()['only_one_match'].lower() == "true":
+                                if config.config_file.conf['only_one_match'].lower() == "true":
                                     return message
                     for param_name in request['postdata'].split("&"):
                         if request['postdata'] == "":
@@ -279,7 +443,7 @@ def sqlitime_scan(request, config_level):
                             if num <= 2.3 and num >= 1.7:
                                 message['request_stat'] = 3
                                 message['message'] += "payload: %s|#|param: %s|,|" % (payload.strip().replace("TIME_VAR", '5').encode('utf-8'), param_name.split("=")[0])
-                                if config.load()['only_one_match'].lower() == "true":
+                                if config.config_file.conf['only_one_match'].lower() == "true":
                                     return message
                 elif "NUM_VAR" in payload:
                     for param_name in urlparse.urlparse(request['url']).query.split("&"):
@@ -294,7 +458,7 @@ def sqlitime_scan(request, config_level):
                                 if num <= 2.3 and num >= 1.7:
                                     message['request_stat'] = 3
                                     message['message'] += "payload: %s|#|param: %s|,|" % (payload.strip().replace("NUM_VAR", VAR).encode('utf-8'), param_name.split("=")[0])
-                                    if config.load()['only_one_match'].lower() == "true":
+                                    if config.config_file.conf['only_one_match'].lower() == "true":
                                         return message
                                     else:
                                         break
@@ -314,7 +478,7 @@ def sqlitime_scan(request, config_level):
                                 if num <= 2.3 and num >= 1.7:
                                     message['request_stat'] = 3
                                     message['message'] += "payload: %s|#|param: %s|,|" % (payload.strip().replace("NUM_VAR", VAR).encode('utf-8'), param_name.split("=")[0])
-                                    if config.load()['only_one_match'].lower() == "true":
+                                    if config.config_file.conf['only_one_match'].lower() == "true":
                                         return message
                                     else:
                                         break
