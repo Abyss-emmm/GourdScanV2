@@ -19,21 +19,22 @@ from lib.settings import RULES_PATH
 warnings.filterwarnings("ignore")
 
 class Config_file():
-    def __init__(self):
+    def __init__(self,path):
         self.conf = None
+        self.path = path
     def load(self):
-        with open(CHECK_CONF_FILE) as con:
+        with open(self.path) as con:
             try:
                 self.conf = json.load(con)
             except:
                 out.error("conf.json error, please download another one and replace it.")
                 exit()
     def update(self):
-        with open(CHECK_CONF_FILE, 'w') as con:
+        with open(self.path, 'w') as con:
             content = json.dumps(self.conf).replace("{", "{\n").replace("}", "\n}").replace(", ", ",\n").replace("'", '"')
             con.write(content)
             return
-config_file = Config_file()
+config_file = Config_file(CHECK_CONF_FILE)
 
 def load():
     with open(CHECK_CONF_FILE) as con:
