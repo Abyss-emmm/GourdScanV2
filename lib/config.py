@@ -14,6 +14,8 @@ import out
 from lib.settings import CHECK_CONF_FILE
 from lib.settings import RULES_CONF_FILE
 from lib.settings import RULES_PATH
+from lib.settings import PLUGIN_CONF_PATH
+from lib.settings import PLUGIN_PATH
 
 
 warnings.filterwarnings("ignore")
@@ -31,10 +33,21 @@ class Config_file():
                 exit()
     def update(self):
         with open(self.path, 'w') as con:
-            content = json.dumps(self.conf).replace("{", "{\n").replace("}", "\n}").replace(", ", ",\n").replace("'", '"')
+            content = json.dumps(self.conf).replace("{", "{\n").replace("}", "\n}").replace(", ", ",\n").replace("'", '"').replace("[","[\n").replace("]","\n]")
             con.write(content)
             return
 config_file = Config_file(CHECK_CONF_FILE)
+plugin_file = Config_file(PLUGIN_CONF_PATH)
+
+def init_pluginconf():
+    files = os.listdir(PLUGIN_PATH)
+    if hasattr(plugin_file.conf,"keys") and "all" in plugin_file.conf.keys():
+        plugin_file.conf['all'] = files
+    else:
+        plugin_file.conf = {"all":files,"use":[]}
+    plugin_file.update()
+    plugin_file.load()
+
 
 def load():
     with open(CHECK_CONF_FILE) as con:

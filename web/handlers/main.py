@@ -96,6 +96,38 @@ class ConfHandler(BaseHandler):
         config.config_file.update()
         return self.render("config.html", config=config.config_file.conf)
 
+class PluginConfUpdate(BaseHandler):
+    @authenticated
+    def get(self):
+        config.init_pluginconf()
+        return self.write(out.jump("/plugin_conf"))
+
+    @authenticated
+    def post(self):
+        config.init_pluginconf()
+        return self.write(out.jump("/plugin_conf"))
+
+class PluginConf(BaseHandler):
+    @authenticated
+    def get(self):
+        plugins = {}
+        use = config.plugin_file.conf["use"]
+        for p in config.plugin_file.conf["all"]:
+            if p in use:
+                plugins[p] = {"true":"checked","false":""}
+            else:
+                plugins[p] = {"true":"","false":"checked"}
+        return self.render("plugin_config.html",plugins=plugins)
+    @authenticated
+    def post(self):
+        use = []
+        for plugin in config.plugin_file.conf["all"]:
+            on = self.get_argument(plugin+"_start")
+            if on == "true":
+                use.append(plugin)
+        config.plugin_file.conf["use"] = use
+        config.plugin_file.update()
+        return self.write(out.jump("/plugin_conf"))
 
 class ScanConfigHandler(BaseHandler):
 

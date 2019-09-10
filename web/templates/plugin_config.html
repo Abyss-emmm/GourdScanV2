@@ -1,0 +1,29 @@
+{% extends "layout.html" %} 
+{% block content %}
+        <div class="container">
+            <div class="col-md-12">
+                <button style="width:50%;margin:2% 25% 0 25%" onclick="window.location.href='/plugin_init'" class="btn btn-success btn-lg btn-block"> Init Plugin Conf </button><br>
+                <div class="row">
+                    <form action="/plugin_conf" method="post">
+					{% for plugin in plugins.keys() %}
+					<div class="col-lg-6 col-md-6">
+                        <div class="card-box">
+                            <h4> {{plugin}}:</h4>
+                            <div class="form-inline">
+                                <label class="form-label config-label">Scan Or Not:</label>
+                                <label class="checkbox-inline" style="float:right">
+                                  <input type="radio" name="{{plugin}}_start" value="false" {{plugins[plugin]['false']}}> False 
+                                </label>
+                                <label class="checkbox-inline" style="float:right">
+                                  <input type="radio" name="{{plugin}}_start" value="true" {{plugins[plugin]['true']}}> True 
+                                </label>
+                            </div>
+                        </div>
+                     </div>
+					{% end %}
+                     <button type="submit" style="width:100%" class="btn btn-danger btn-lg btn-block"> Update All Config</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+{% end %}

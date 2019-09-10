@@ -14,6 +14,10 @@ SESSION_CONF_FILE = os.path.join(ROOT, 'conf/', 'session')
 
 CONF_PATH = os.path.join(ROOT, 'conf/')
 
+PLUGIN_CONF_PATH = os.path.join(ROOT,'conf','plugin.conf')
+
+PLUGIN_PATH = os.path.join(ROOT,'plugins')
+
 PAYLOAD_MODE_APPEND = r"append"
 
 PAYLOAD_MODE_REPLACE = r"replace"

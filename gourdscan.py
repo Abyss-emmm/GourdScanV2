@@ -42,6 +42,7 @@ def main():
     settings['debug'] = False
     site.addsitedir(path(ROOT, 'handlers'))
     config.config_file.load()
+    config.plugin_file.load()
 #    conf = config.load()
     conf = config.config_file.conf
     conf['scapy_stat'] = 'false'

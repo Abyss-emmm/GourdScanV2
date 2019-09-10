@@ -17,5 +17,7 @@ url_patterns =  [
     (r"^/del", handlers.main.DelHandler),
     (r"^/reset_scan", handlers.main.ResetScanHandler),
     (r"^/api",handlers.main.ApiHandler),
+    (r"^/plugin_init",handlers.main.PluginConfUpdate),
+    (r"^/plugin_conf",handlers.main.PluginConf),
     (r"^/.*", handlers.main.PageNotFoundHandler),
 ]
