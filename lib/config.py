@@ -40,11 +40,13 @@ config_file = Config_file(CHECK_CONF_FILE)
 plugin_file = Config_file(PLUGIN_CONF_PATH)
 
 def init_pluginconf():
-    files = os.listdir(PLUGIN_PATH)
+    for root,_,files in os.walk(PLUGIN_PATH):
+        dirs = _
+        break
     if hasattr(plugin_file.conf,"keys") and "all" in plugin_file.conf.keys():
-        plugin_file.conf['all'] = files
+        plugin_file.conf['all'] = dirs
     else:
-        plugin_file.conf = {"all":files,"use":[]}
+        plugin_file.conf = {"all":dirs,"use":[]}
     plugin_file.update()
     plugin_file.load()
 

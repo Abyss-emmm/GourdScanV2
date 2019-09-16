@@ -3,3 +3,4 @@ tornado
 redis
 scapy
 pcapy
+pyyaml

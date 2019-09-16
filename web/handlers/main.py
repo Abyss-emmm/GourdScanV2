@@ -15,6 +15,7 @@ from lib import scan
 from lib import secure
 from lib import config
 from lib import session
+from thirdparty.exploit import Exploitdb
 from proxy import pyscapy, mix_proxy, proxy_io
 from web.handlers.base import BaseHandler, authenticated
 
@@ -127,6 +128,8 @@ class PluginConf(BaseHandler):
                 use.append(plugin)
         config.plugin_file.conf["use"] = use
         config.plugin_file.update()
+        expdb = Exploitdb()
+        expdb.init()
         return self.write(out.jump("/plugin_conf"))
 
 class ScanConfigHandler(BaseHandler):

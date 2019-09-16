@@ -17,9 +17,9 @@ from lib import config
 from lib.redisopt import conn
 from settings import PAYLOAD_MODE_APPEND,PAYLOAD_MODE_REPLACE,PARAM_TYPE_XML,PARAM_TYPE_JSON,PARAM_TYPE_TEXT,PARAM_DATA_JSON
 from lib.ordereddict import OrderedDict
-from params import walk,replacepayload4text,islikexml,islikejson
-from lib.params import paramtoDict
+from thirdparty.utils import islikexml,islikejson,paramtoDict
 from lib.settings import PARAM_DATA_JSON
+from thirdparty.exploit import Exploitdb
 
 '''
 All those scan funcs and threads controll
@@ -32,94 +32,6 @@ def thread_filled():
         return False
     else:
         return True
-
-
-def time_requests(method, url, headers, postdata=""):
-    try:
-        time0 = time.time()
-        if method == 'POST':
-            res = requests.post(url=url, data=postdata, headers=headers)
-        else:
-            res = requests.get(url=url, headers=headers)
-        time1 = time.time()
-        return res.content, time1-time0
-    except Exception as e:
-        print(e)
-        return "Error", 0
-
-
-def request_payload(request, payload, param, postdata=False, time_check=False):
-    if postdata:
-        postdata = request['postdata'].replace(param, param + payload)
-        res, times = time_requests(request['method'], request['url'], request['headers'], postdata)
-    elif urlparse.urlparse(request['url']).query != "":
-        url = request['url'].replace(param, param + payload)
-        res, times = time_requests(request['method'], url, request['headers'], request['postdata'])
-    elif time_check:
-        return "Error", 0
-    else:
-        return "Error"
-    if time_check:
-        return res, times
-    else:
-        return res
-
-def request_payload_allparams(request,payload,mode = PAYLOAD_MODE_APPEND):
-    params = pickle.loads(request['params'])
-    for paramfrom in params.keys():
-        # replace query data,use uri directly,and can pass to time_requests's url param
-        querydata = request['url']
-        method = request['method']
-        if method == "POST":
-            postdata = request['postdata']
-        for param in params[paramfrom].keys():
-            paramdata = params[paramfrom][param]
-            type = paramdata['type']
-            if type == PARAM_TYPE_JSON:
-                data = paramdata[type]
-                if method == 'GET':
-                    for payloaddata in walk(querydata,payload,mode,param,data):
-                        res,times = time_requests(request['method'], payloaddata, request['headers'])
-                        yield param,res,times
-                if method == 'POST':
-                    if paramfrom == "query":
-                        for payloaddata in walk(querydata,payload,mode,param,data):
-                            res,times = time_requests(request['method'], payloaddata, request['headers'],request['postdata'])
-                            yield param,res,times
-                    if paramfrom == "postdata":
-                        for payloaddata in walk(postdata,payload,mode,param,data):
-                            res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
-                            yield param,res,times
-            if type == PARAM_TYPE_TEXT:
-                data = paramdata['value']
-                if method == 'GET':
-                    payloaddata = replacepayload4text(querydata,param,data,payload,mode)
-                    res,times = time_requests(request['method'], payloaddata, request['headers'])
-                    yield param,res,times
-                if method == 'POST':
-                    if paramfrom == "query":
-                        payloaddata = replacepayload4text(querydata,param,data,payload,mode)
-                        res,times = time_requests(request['method'], payloaddata, request['headers'],request['postdata'])
-                        yield param,payloaddata,res,times
-                    if paramfrom == "postdata":
-                        payloaddata = replacepayload4text(postdata,param,data,payload,mode)
-                        res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
-                        yield param,res,times
-            if type == PARAM_DATA_JSON:
-                data = paramdata[type]
-                postdata_tmp = "%s=%s" % (param,data)
-                idx = len(PARAM_DATA_JSON)+1
-                if method == 'POST':
-                    if paramfrom == "postdata":
-                        for payloaddata in walk(postdata_tmp,payload,mode,param,data):
-                            payloaddata = payloaddata[idx:]
-                            res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
-                            tmp = ""
-                            for i in range(0,len(payloaddata)+1):
-                                tmp += payloaddata[i*80:(i+1)*80]+"\n"
-                            #fake the param name ,so return all payloaddata
-                            yield tmp,res,times
-
 
 
 def query_collect(query, url):
@@ -135,6 +47,7 @@ def requests_convert(request):
 
 
 def scan_start():
+    expdb = Exploitdb()
     while config.config_file.conf['scan_stat'].lower() == "true":
         try:
             while thread_filled():
@@ -145,10 +58,9 @@ def scan_start():
                 continue
             reqed = conn.hget("request", reqhash)
             request = json.loads(ds(reqed))
-            rules = config.load_rule()['scan_type']
             url = urlparse.urlparse(request['url']).query
             if (request['method'] == "GET" and url != "") or (request['method'] == "POST" and (request["postdata"] != "" or url != "")):
-                t = threading.Thread(target=new_scan, args=(reqhash, requests_convert(request), rules))
+                t = threading.Thread(target=new_scan, args=(reqhash, requests_convert(request), expdb))
                 t.start()
             else:
                 conn.lrem("running", 1, reqhash)
@@ -158,24 +70,12 @@ def scan_start():
     return
 
 
-def new_scan(reqhash, request, rules):
+def new_scan(reqhash, request, expdb):
     out.good("start new mission: %s" % reqhash)
     if not check_before_scan(reqhash,request):
         return
-    request_stat = 0
-    request_message = []
-    request_result = {}
-    vulnerable = 0
-    for rule in rules:
-        if config.config_file.conf['scan_stat'].lower() == "true":
-            message = eval(rule + "_scan")(request, int(config.config_file.conf['scan_level']))
-            request_stat = message['request_stat']
-            if request_stat > vulnerable:
-                vulnerable = request_stat
-            request_message = message['message'].split("|,|")
-            request_result[rule] = {"stat": request_stat, "message": request_message}
-    request_result['stat'] = vulnerable
-    if vulnerable > 0:
+    request_result = expdb.exp(request)
+    if request_result['stat'] > 0:
         conn.lpush("vulnerable", reqhash)
     conn.hset("results", reqhash, base64.b64encode(json.dumps(request_result)))
     conn.lrem("running", 1, reqhash)

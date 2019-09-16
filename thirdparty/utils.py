@@ -1,12 +1,14 @@
-#coding=utf-8
-
+#encoding:utf-8
 import json
 import re
+import os
+import pickle
+import time
+import requests
 from lib.ordereddict import OrderedDict
 from xml.dom import minidom
 from urllib import unquote_plus,quote
 from lib.settings import PARAM_TYPE_XML,PARAM_TYPE_JSON,PARAM_TYPE_TEXT,PAYLOAD_MODE_APPEND,PAYLOAD_MODE_REPLACE,PARAM_DATA_JSON
-
 
 def paramtoDict(parameters):
     testableParameters = OrderedDict()
@@ -113,3 +115,79 @@ def replacepayload4text(requestdata,param,data,payload,mode):
         return newrequestdata[:-1]
     else:
         return ""
+
+def request_payload_allparams(request,payload,mode = PAYLOAD_MODE_APPEND):
+    params = pickle.loads(request['params'])
+    for paramfrom in params.keys():
+        # replace query data,use uri directly,and can pass to time_requests's url param
+        querydata = request['url']
+        method = request['method']
+        if method == "POST":
+            postdata = request['postdata']
+        for param in params[paramfrom].keys():
+            paramdata = params[paramfrom][param]
+            type = paramdata['type']
+            if type == PARAM_TYPE_JSON:
+                data = paramdata[type]
+                if method == 'GET':
+                    for payloaddata in walk(querydata,payload,mode,param,data):
+                        res,times = time_requests(request['method'], payloaddata, request['headers'])
+                        yield param,res,times
+                if method == 'POST':
+                    if paramfrom == "query":
+                        for payloaddata in walk(querydata,payload,mode,param,data):
+                            res,times = time_requests(request['method'], payloaddata, request['headers'],request['postdata'])
+                            yield param,res,times
+                    if paramfrom == "postdata":
+                        for payloaddata in walk(postdata,payload,mode,param,data):
+                            res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
+                            yield param,res,times
+            if type == PARAM_TYPE_TEXT:
+                data = paramdata['value']
+                if method == 'GET':
+                    payloaddata = replacepayload4text(querydata,param,data,payload,mode)
+                    res,times = time_requests(request['method'], payloaddata, request['headers'])
+                    yield param,res,times
+                if method == 'POST':
+                    if paramfrom == "query":
+                        payloaddata = replacepayload4text(querydata,param,data,payload,mode)
+                        res,times = time_requests(request['method'], payloaddata, request['headers'],request['postdata'])
+                        yield param,payloaddata,res,times
+                    if paramfrom == "postdata":
+                        payloaddata = replacepayload4text(postdata,param,data,payload,mode)
+                        res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
+                        yield param,res,times
+            if type == PARAM_DATA_JSON:
+                data = paramdata[type]
+                postdata_tmp = "%s=%s" % (param,data)
+                idx = len(PARAM_DATA_JSON)+1
+                if method == 'POST':
+                    if paramfrom == "postdata":
+                        for payloaddata in walk(postdata_tmp,payload,mode,param,data):
+                            payloaddata = payloaddata[idx:]
+                            res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
+                            tmp = ""
+                            for i in range(0,len(payloaddata)+1):
+                                tmp += payloaddata[i*80:(i+1)*80]+"\n"
+                            #fake the param name ,so return all payloaddata
+                            yield tmp,res,times
+
+def time_requests(method, url, headers, postdata=""):
+    try:
+        time0 = time.time()
+        if method == 'POST':
+            res = requests.post(url=url, data=postdata, headers=headers)
+        else:
+            res = requests.get(url=url, headers=headers)
+        time1 = time.time()
+        return res.content, time1-time0
+    except Exception as e:
+        print(e)
+        return "Error", 0
+
+
+def getkey(filepath):
+    path = os.path.abspath(filepath)
+    dir,filename = os.path.split(path)
+    dir = os.path.basename(dir)
+    return "/".join([dir,filename])
