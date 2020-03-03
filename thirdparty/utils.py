@@ -152,7 +152,7 @@ def request_payload_allparams(request,payload,mode = PAYLOAD_MODE_APPEND):
                     if paramfrom == "query":
                         payloaddata = replacepayload4text(querydata,param,data,payload,mode)
                         res,times = time_requests(request['method'], payloaddata, request['headers'],request['postdata'])
-                        yield param,payloaddata,res,times
+                        yield param,res,times
                     if paramfrom == "postdata":
                         payloaddata = replacepayload4text(postdata,param,data,payload,mode)
                         res,times = time_requests(request['method'], request['url'], request['headers'],payloaddata)
