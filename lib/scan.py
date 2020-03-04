@@ -108,8 +108,8 @@ def check_before_scan(reqhash,request):
         try:
             getparams = paramtoDict(query)
             params['query'] = getparams
-        except:
-            message = ["Error:Can't anaylyze data|#|Data:"+getparam]
+        except Exception,e:
+            message = ["Error:Can't anaylyze data|#|URL:"+url+"|#|Error:"+str(e)]
             vulnerable = 1
             request_result['b4check'] = {"stat":vulnerable,"message":message}
             request_result['stat'] = vulnerable
