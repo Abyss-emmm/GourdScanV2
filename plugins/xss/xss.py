@@ -9,7 +9,7 @@ def getpayload():
     p = yaml.load(data,Loader=yaml.FullLoader)
     return p
 
-def exp(request):
+def exp4req(request):
     payloads = getpayload()['payloads']
     message = {"request_stat": 0, "message": ""}
     normal = payloads['normal']

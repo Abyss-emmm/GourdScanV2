@@ -191,3 +191,15 @@ def getkey(filepath):
     dir,filename = os.path.split(path)
     dir = os.path.basename(dir)
     return "/".join([dir,filename])
+
+
+def check4once_scan(host,key,scanrecord):
+    if scanrecord.has_key(key):
+        if scanrecord[key].has_key(host):
+            return True
+        else:
+            scanrecord[key][host] = True
+    else:
+        scanrecord[key] = {}
+        scanrecord[key][host] = True
+    return False
