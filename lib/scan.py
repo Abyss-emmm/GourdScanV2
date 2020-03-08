@@ -58,8 +58,8 @@ def scan_start():
                 continue
             reqed = conn.hget("request", reqhash)
             request = json.loads(ds(reqed))
-            url = urlparse.urlparse(request['url']).query
-            if (request['method'] == "GET" and url != "") or (request['method'] == "POST" and (request["postdata"] != "" or url != "")):
+            query = urlparse.urlparse(request['url']).query
+            if (request['method'] == "GET" and query != "") or (request['method'] == "POST" and (request["postdata"] != "" or query != "")):
                 t = threading.Thread(target=new_scan, args=(reqhash, requests_convert(request), expdb))
                 t.start()
             else:

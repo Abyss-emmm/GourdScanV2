@@ -44,7 +44,7 @@ def get_hash(host, uri, postdata):
 
 def content_deal(headers, host, method, postdata, uri, packet):
     u = urlparse.urlparse(uri)
-    url = uri.split(u.netloc)[-1]
+#    url = uri.split(u.netloc)[-1]
 #    white_domain = config.load()['white_domain']
 #    black_domain = config.load()['black_domain']
 #    black_ext = config.load()['black_ext']
