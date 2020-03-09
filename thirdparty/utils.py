@@ -9,6 +9,7 @@ from lib.ordereddict import OrderedDict
 from xml.dom import minidom
 from urllib import unquote_plus,quote
 from lib.settings import PARAM_TYPE_XML,PARAM_TYPE_JSON,PARAM_TYPE_TEXT,PAYLOAD_MODE_APPEND,PAYLOAD_MODE_REPLACE,PARAM_DATA_JSON
+from urlparse import urlparse
 
 def paramtoDict(parameters):
     testableParameters = OrderedDict()
@@ -193,7 +194,13 @@ def getkey(filepath):
     return "/".join([dir,filename])
 
 
+def geturl(uri):
+    _uri = urlparse(uri)
+    url = "%s://%s/" % (_uri.scheme,_uri.netloc)
+    return url
+
 def check4once_scan(host,key,scanrecord):
+    host = geturl(host)
     if scanrecord.has_key(key):
         if scanrecord[key].has_key(host):
             return True
